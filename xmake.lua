@@ -11,8 +11,11 @@ set_languages("c++17")
 set_symbols("debug")
 -- Keep symbols in both modes: P0 must be auditable with nm/readelf/objdump.
 set_strip("none")
--- Start from -O0 and add the release flag explicitly, so the recorded
--- optimization flags in the benchmark manifest match the real command line.
+-- Start from -O0 and add the release flag explicitly. The recorded
+-- optimization flags in the benchmark manifest are the effective setting for
+-- the mode, not a verbatim command line: the real command line also carries -O0
+-- (set_optimize "none") and -g (set_symbols "debug"), and the manifest does not
+-- list -std=c++17 or -Wall/-Wextra.
 set_optimize("none")
 add_cxflags("-Wall", "-Wextra")
 

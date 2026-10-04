@@ -88,15 +88,27 @@ R0 `libboost_context_reference.a` defines:
 
 No `continuation` or `fiber` implementation symbols.
 
-`tools/verify/symbols.sh` asserts only a subset of the above. It checks that R1
-defines `make_fcontext` and `jump_fcontext` and does not define
-`ontop_fcontext`; that R0 defines all three primitives, contains a
-`stack_traits` symbol, and contains no `continuation`/`fiber` implementation
-symbol; and that `test_raw_fcontext` defines or references no `boost::` symbol.
-It does **not** check the `boost::context::detail::{make,jump,ontop}_fcontext`
-wrappers, the individual `stack_traits` members, or the absence of any *other*
-symbol in either archive; those parts of the lists above are source-derived, not
-machine-checked.
+`tools/verify/symbols.sh` asserts less than the lists above, and its checks are
+narrower than they look. Its `defined_text()` helper runs `nm --defined-only`
+and keeps only entries whose type letter is `T` (defined global text symbols),
+deduplicated per archive; every archive check runs against that filtered set:
+
+- R1 defines `make_fcontext` and `jump_fcontext`, and does not define
+  `ontop_fcontext`.
+- R0 defines all three primitives, and defines at least one symbol whose name
+  contains `stack_traits`.
+- R0's `continuation`/`fiber` absence check runs against the same `T`-only set,
+  so it would not exclude such code appearing under another symbol class (`W`,
+  `t`, `D`, `B`, `R`, or an undefined entry). This is not a complete
+  symbol-closure oracle.
+- The one check that does cover the complete symbol table is the R1 binary:
+  `nm -C test_raw_fcontext` (defined and undefined, demangled) must contain no
+  `boost::` name.
+
+The `boost::context::detail::{make,jump,ontop}_fcontext` wrappers, the
+individual `stack_traits` members, and the absence of any *other* symbol in
+either archive are stated from the pinned upstream sources and the build graph;
+they are not machine-checked.
 
 ## Correctness coverage
 
