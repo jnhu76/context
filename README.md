@@ -38,10 +38,19 @@ xmake run bench_context_switch
 
 This regression check validates pinned upstream identities and cleanliness, debug/release builds, both correctness suites, benchmark smoke, and the compiled symbol set. It remains useful after P0 as a guard against baseline drift.
 
-## Documentation
+## Documentation authority
 
-- `AGENTS.md` — project-wide research/governance rules, including document-audit discipline.
-- `docs/UPSTREAM.md` — upstream identity, immutability, provenance, and update policy.
-- `docs/P0-BASELINE.md` — P0 scope, actual source/symbol set, tests, benchmark, and limitations.
+Read in this order:
 
-Platform currently under study: Linux x86-64 SysV ABI.
+1. `AGENTS.md` — project-wide research/governance rules, including document-audit discipline.
+2. `docs/RESEARCH-FOUNDATION.md` — long-term research authority: questions, execution contract,
+   closure framework, phase model (P0–P5), evidence levels, and the proven/hypothesis ledger.
+3. `docs/UPSTREAM.md` — upstream identity, immutability, provenance, and update policy.
+4. `docs/P0-BASELINE.md` — P0 phase evidence (source/symbol set, tests, benchmark, limitations).
+5. Code and verification scripts (`xmake.lua`, `tools/verify/`, `tests/`, `bench/`).
+
+When documents disagree with code or experiments, the executable facts win and the documents are
+corrected — never the reverse.
+
+Platform currently under study: Linux x86-64 SysV ABI. Next phase: **P1 — User-space Closure**
+(not started).

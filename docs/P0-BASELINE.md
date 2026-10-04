@@ -1,5 +1,9 @@
 # P0 baseline
 
+This document is **P0 phase evidence**, not project-level authority. Project scope, research
+questions, the closure framework, and the phase model (P0–P5) live in
+`docs/RESEARCH-FOUNDATION.md`. Keep this document P0-specific.
+
 ## Scope
 
 P0 establishes a reproducible, auditable research foundation:

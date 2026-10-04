@@ -6,6 +6,28 @@
 
 > P0 只是已完成的 reproducible baseline，不是本仓库长期 scope，也不是后续 agent 的行为边界。
 
+## Authority 顺序（开工前必读）
+
+1. `AGENTS.md`（本文件）— 执行纪律与治理。
+2. `docs/RESEARCH-FOUNDATION.md` — 长期研究权威：研究问题、契约、closure 框架、阶段（P0–P5）、证据等级。
+3. `docs/UPSTREAM.md` — upstream policy：pin、immutable、provenance、更新与再验证。
+4. `docs/P0-BASELINE.md` — P0 阶段证据（**不是**项目总纲）。
+5. 代码与验证脚本（`xmake.lua`、`tools/verify/`、`tests/`、`bench/`）— 可执行事实。
+
+文档与代码/实验冲突时，**以可执行事实为准**，并立即修正文档；不得修改事实去迁就文档。
+
+## 证据等级
+
+- **A. VERIFIED FACT**：可由当前代码、build graph、test、CI、exact upstream source、实际
+  symbol/source closure 直接验证。
+- **B. CURRENT CONTRACT / PROJECT DECISION**：人为冻结的研究边界（平台、build authority、
+  upstream immutable、owner-worker、no migration 等）。
+- **C. HYPOTHESIS / CANDIDATE**：待验证；必须写成 candidate / hypothesis / proposed protocol。
+- **D. FUTURE WORK**：尚未实现或验证。
+
+不得把 B/C/D 写成 A；不得因为 research plan 里存在某物就写成“项目已支持”。
+详见 `docs/RESEARCH-FOUNDATION.md` §4 与 §14。
+
 ## 1. 研究纪律
 
 所有工作遵循：
@@ -90,15 +112,19 @@ measurement
 
 ## 6. 实验路线
 
-总体路线是：
+阶段模型（**P0–P5**，权威定义与 exit criteria 见 `docs/RESEARCH-FOUNDATION.md` §10）：
 
-- **E0**：固定契约、upstream、环境和测量条件；
-- **E1**：建立未修改 reference 与 correctness harness；
-- **E2**：构造并验证最小 source/function/state closure；
-- **E3**：加入 FIFO、wait/lifecycle、remote notification、multi-worker 等真实 runtime 语义并做压力实验；
-- **E4**：只有 profiling 证明 carrier 的 kernel 调度/唤醒是重要瓶颈后，才进入 eBPF/sched_ext。
+- **P0** Reproducible Baseline — 已完成（阶段证据，不是长期 scope）。
+- **P1** User-space Closure — 下一步，未开始。
+- **P2** Minimal User-space Runtime — 未开始。
+- **P3** Multi-worker & Boundary Profiling — 未开始。
+- **P4** eBPF Observability — 未开始。
+- **P5** Conditional sched_ext Experiments — 未开始。
 
-E4 中 kernel 的研究对象不是“裁剪 Linux 源码”，而是最小 **hook / helper / state / information closure**。用户态仍负责 fiber/context 的 resume、wait correctness 和 lifetime。
+不得提前实现后续阶段，也不得把后续阶段写成已完成；进入下一阶段必须满足其 exit criteria。
+kernel 侧研究对象不是“裁剪 Linux 源码”，而是最小 **capability / hook / helper / state /
+information closure**，且第一阶段保持 stock Linux。用户态仍负责 fiber/context 的 resume、
+wait correctness 和 lifetime。
 
 ## 7. 测量与停止条件
 
