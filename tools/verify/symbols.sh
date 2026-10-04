@@ -66,7 +66,9 @@ echo "-- R1 test_raw_fcontext: must not define or reference Boost symbols --"
 # Inspect the complete symbol table (defined + undefined), demangled. Using
 # --defined-only here would not prove the stated property because an unresolved
 # or dynamically satisfied Boost reference would be invisible to that check.
-if nm -C "$r1_bin" 2>/dev/null | grep -Fq 'boost::'; then
+# Do not use grep -q in this pipe: with pipefail, early grep termination can
+# SIGPIPE nm and turn a real match into a false-negative pipeline status.
+if nm -C "$r1_bin" 2>/dev/null | grep -F 'boost::' >/dev/null; then
   fail "test_raw_fcontext unexpectedly defines or references Boost symbols"
 fi
 
