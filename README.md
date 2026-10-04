@@ -34,7 +34,7 @@ xmake run bench_context_switch
 ./tools/verify/p0.sh
 ```
 
-This regression check validates pinned upstream identities and cleanliness, debug/release builds, both correctness suites, benchmark smoke, and the compiled symbol set. It is a baseline-drift guard, not a statement that later phases are complete.
+This regression check cross-checks the Boost.Context pin against the gitlink, the submodule HEAD, `docs/UPSTREAM.md` and `xmake.lua`, requires every submodule to be initialized with a clean working tree, then runs the debug/release builds, both correctness suites, a benchmark smoke run, and the release/debug symbol inspection. It is a baseline-drift guard, not a statement that later phases are complete. Only the Boost.Context pin is compared by SHA; the remaining reference-dependency pins are covered by the initialized-and-clean check alone.
 
 ## Documentation authority
 

@@ -28,9 +28,10 @@ is built or referenced.
 
 ### R0 — Boost.Context public/reference baseline
 
-`boost::context::fiber` is used as a behavior/reference oracle, not as a
-performance model. The harness runs a deterministic ping-pong between the main
-context and one child fiber. No scheduler.
+`boost::context::fiber` is used as a behavior/reference oracle. It is not a
+performance model: it is not a bar to beat, and no claim about achievable
+performance follows from measuring it. The harness runs a deterministic
+ping-pong between the main context and one child fiber. No scheduler.
 
 ### R1 — raw fcontext baseline
 
@@ -85,8 +86,17 @@ R0 `libboost_context_reference.a` defines:
 - `boost::context::detail::{make,jump,ontop}_fcontext`
 - `boost::context::stack_traits::{default_size,is_unbounded,maximum_size,minimum_size,page_size}`
 
-No `continuation` or `fiber` implementation symbols. `tools/verify/symbols.sh`
-asserts all of the above.
+No `continuation` or `fiber` implementation symbols.
+
+`tools/verify/symbols.sh` asserts only a subset of the above. It checks that R1
+defines `make_fcontext` and `jump_fcontext` and does not define
+`ontop_fcontext`; that R0 defines all three primitives, contains a
+`stack_traits` symbol, and contains no `continuation`/`fiber` implementation
+symbol; and that `test_raw_fcontext` defines or references no `boost::` symbol.
+It does **not** check the `boost::context::detail::{make,jump,ontop}_fcontext`
+wrappers, the individual `stack_traits` members, or the absence of any *other*
+symbol in either archive; those parts of the lists above are source-derived, not
+machine-checked.
 
 ## Correctness coverage
 
@@ -118,7 +128,11 @@ rounds (`2 * rounds` context transfers); final termination and destruction occur
 after the timer. It reports elapsed wall-clock, mean cost per round-trip and per
 transfer, plus the raw iteration/transfer counts. It also prints an environment
 manifest (OS, kernel, arch, CPU, compiler and version, Xmake version, build mode,
-upstream SHA, target ABI, optimization flags).
+upstream SHA, target ABI, optimization flags). `target_abi` and
+`optimization_flags` are build-time constants defined in `xmake.lua`, not a
+verbatim compiler command line: `optimization_flags` reports the intended
+effective setting for the build mode, and other flags such as `-std=c++17` and
+`-Wall -Wextra` are not listed.
 
 It establishes a reproducible baseline. It does **not** prove optimization and
 deliberately reports no p99, throughput regime, million-fiber, multi-worker, or
@@ -130,7 +144,10 @@ kernel-scheduling numbers.
 - No user-space runtime exists.
 - No kernel/eBPF/sched_ext work has been introduced.
 - No performance optimization has been attempted.
-- No theoretical lower bound has been established.
+- No theoretical lower bound is claimed or pursued. The project only claims a
+  contract-relative, counterexample-supported minimum candidate
+  (`docs/RESEARCH-FOUNDATION.md`, section 1); a global minimality proof is out of
+  scope rather than a pending P0 item.
 - R1's terminal handoff is a harness lifecycle convention; it is not a claim
   that raw `fcontext` provides a general termination/reclamation abstraction.
 - `ontop_fcontext` is compiled into R0 only because upstream `fcontext.cpp`
@@ -138,3 +155,9 @@ kernel-scheduling numbers.
 - Sanitizers are not enabled: custom stack switching produces misleading
   results under ASan's stack tracking, so P0 relies on explicit deterministic
   tests instead.
+- The benchmark manifest records toolchain, ABI, flags and warm-up, but neither
+  the stack policy/size nor the CPU placement, and no raw benchmark output is
+  committed to the repository. The pilot measurement discipline of
+  `docs/RESEARCH-FOUNDATION.md` section 12 (at least five independent process
+  runs per configuration, randomized order, saved raw results) has not been
+  applied to this baseline, which makes no performance claim in the first place.
