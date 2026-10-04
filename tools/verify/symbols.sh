@@ -62,9 +62,12 @@ if grep -Eq 'continuation|fiber' <<<"$r0"; then
   fail "R0 unexpectedly contains continuation/fiber implementation symbols"
 fi
 
-echo "-- R1 test_raw_fcontext: must not reference Boost symbols --"
-if nm --defined-only "$r1_bin" 2>/dev/null | grep -q 'boost'; then
-  fail "test_raw_fcontext unexpectedly references Boost symbols"
+echo "-- R1 test_raw_fcontext: must not define or reference Boost symbols --"
+# Inspect the complete symbol table (defined + undefined), demangled. Using
+# --defined-only here would not prove the stated property because an unresolved
+# or dynamically satisfied Boost reference would be invisible to that check.
+if nm -C "$r1_bin" 2>/dev/null | grep -Fq 'boost::'; then
+  fail "test_raw_fcontext unexpectedly defines or references Boost symbols"
 fi
 
 echo "P0 SYMBOLS: PASS"
