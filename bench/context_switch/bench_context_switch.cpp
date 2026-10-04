@@ -69,26 +69,48 @@ std::string cpu_model() {
     return model;
 }
 
-// One deterministic ping-pong round-trip = main -> child -> main.
-long pingpong(long rounds) {
-    namespace ctx = boost::context;
+// A primed ping-pong pair. Construction, the initial entry into the child, and
+// normal termination all happen outside the measured interval. Each call to
+// run_rounds() performs exactly two context transfers per round:
+// main -> child -> main.
+class PingPong {
+public:
+    explicit PingPong(long rounds)
+        : rounds_(rounds),
+          child_([this](boost::context::fiber&& main) -> boost::context::fiber {
+              boost::context::fiber caller = std::move(main);
 
-    long runs = 0;
-    ctx::fiber child{[&runs, rounds](ctx::fiber&& main) -> ctx::fiber {
-        ctx::fiber caller = std::move(main);
-        for (long i = 0; i < rounds; ++i) {
-            ++runs;
-            caller = std::move(caller).resume();
-        }
-        return caller; // implicit move; fiber is move-only
-    }};
+              // Prime the child before timing starts. Resuming from this point
+              // enters the steady-state loop below.
+              caller = std::move(caller).resume();
 
-    for (long i = 0; i < rounds; ++i) {
-        child = std::move(child).resume();
+              for (long i = 0; i < rounds_; ++i) {
+                  ++runs_;
+                  caller = std::move(caller).resume();
+              }
+              return caller;
+          }) {
+        child_ = std::move(child_).resume();
     }
-    child = std::move(child).resume(); // normal termination
-    return runs;
-}
+
+    void run_rounds() {
+        for (long i = 0; i < rounds_; ++i) {
+            child_ = std::move(child_).resume();
+        }
+    }
+
+    bool finish() {
+        child_ = std::move(child_).resume();
+        return !static_cast<bool>(child_);
+    }
+
+    long runs() const { return runs_; }
+
+private:
+    long rounds_;
+    long runs_ = 0;
+    boost::context::fiber child_;
+};
 
 } // namespace
 
@@ -103,12 +125,25 @@ int main(int argc, char** argv) {
     }
 
     const long warmup_rounds = rounds < 20000 ? rounds : 20000;
-    volatile long sink = pingpong(warmup_rounds);
-    (void)sink;
+    {
+        PingPong warmup(warmup_rounds);
+        warmup.run_rounds();
+        if (warmup.runs() != warmup_rounds || !warmup.finish()) {
+            std::fprintf(stderr, "benchmark error: warm-up did not terminate cleanly\n");
+            return 1;
+        }
+    }
 
+    // Construction and priming are intentionally outside the measured window.
+    PingPong measured(rounds);
     const auto t0 = std::chrono::steady_clock::now();
-    const long runs = pingpong(rounds);
+    measured.run_rounds();
     const auto t1 = std::chrono::steady_clock::now();
+    const long runs = measured.runs();
+
+    // Termination and destruction are also intentionally outside the measured
+    // window, so the denominator below is exactly 2 * rounds transfers.
+    const bool terminated = measured.finish();
 
     const double elapsed_ns = std::chrono::duration<double, std::nano>(t1 - t0).count();
     const double per_roundtrip_ns = elapsed_ns / static_cast<double>(rounds);
@@ -146,6 +181,10 @@ int main(int argc, char** argv) {
 
     if (runs != rounds) {
         std::fprintf(stderr, "benchmark error: child ran %ld times, expected %ld\n", runs, rounds);
+        return 1;
+    }
+    if (!terminated) {
+        std::fprintf(stderr, "benchmark error: measured fiber did not terminate cleanly\n");
         return 1;
     }
     return 0;
