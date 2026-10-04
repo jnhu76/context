@@ -19,7 +19,7 @@
 1. 基本 context transfer；
 2. suspend/resume 后局部状态保持；
 3. suspend 发生在真实的嵌套调用栈中；
-4. context 正常结束后不会再次 resume，且生命周期处理明确；
+4. R0 正常结束后不再 resume；R1 user body 返回后完成 terminal handoff，dead context 不再 resume，再回收 backing stack；
 5. 数千次以上确定性 ping-pong。
 
 Benchmark 只建立可复现基线：warm-up、固定迭代数、wall-clock、每次 transfer 平均成本。**不得据此声称最小语义或优于 Boost.Context。**
