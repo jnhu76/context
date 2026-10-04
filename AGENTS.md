@@ -60,9 +60,9 @@ shutdown protocols to the tests.
 
 ## Evidence and verification
 
-- One verification entrypoint (`xmake run verify-p0` or `./tools/verify/p0.sh`) checks:
-  pinned SHA, submodule clean, debug build, correctness tests, release build, benchmark
-  runs, symbol inspection. Fail loudly on missing tools — never silently skip.
+- One verification entrypoint (`./tools/verify/p0.sh`) checks: pinned SHA, submodule
+  clean, debug build, correctness tests, release build, benchmark runs, symbol
+  inspection. Fail loudly on missing tools — never silently skip.
 - Symbol inspection with `nm` / `readelf -Ws` / `objdump` must reveal which fcontext
   primitives are in the artifact and whether `ontop_fcontext` or unrelated Boost.Context
   code leaked in.
