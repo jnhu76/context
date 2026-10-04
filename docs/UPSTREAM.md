@@ -7,37 +7,26 @@
 - Acquisition: `git submodule` (recorded in `.gitmodules`)
 - Pinned commit: `1b7bb3d6173032c592cbe82d43f4406e51c3653a`
 
-This repository is **not** a fork of `boostorg/context` and maintains no fork
-relationship. It consumes upstream as a pinned, immutable submodule.
+This repository is **not** a fork of `boostorg/context` and maintains no fork relationship. It consumes upstream as a pinned, immutable submodule and treats that tree as experimental input/reference material rather than project-owned implementation.
 
 ## Why no fork
 
-A fork would let upstream code drift from the experiment and would blur the
-question "which exact upstream revision produced this result?". A submodule
-pinned to one commit keeps a single, auditable identity while leaving this
-repository free to add only its own experiment code.
+A fork would blur the identity of the upstream mechanism under test and encourage experiment-specific edits to become mixed with upstream history. A pinned submodule keeps the upstream revision auditable while allowing this repository to build only the source closure required by each experiment.
 
 ## Immutable substrate policy
 
 `third_party/boost-context` must be treated as read-only:
 
-- **U-01** No upstream file may be modified: `.cpp`, `.hpp`, `.S`, build files,
-  tests, docs.
-- **U-02** No local patch may be applied to the submodule.
-- **U-03** Upstream sources may not be copied into this repository and modified,
-  except for an explicitly provenance-recorded experimental copy that P0
-  requires. P0 requires none.
-- **U-04** A check must prove the working tree is clean. `tools/verify/p0.sh`
-  runs `git -C third_party/boost-context status --porcelain` (and the same for
-  every other submodule) and fails if the output is non-empty.
+- **U-01** No upstream file may be modified: `.cpp`, `.hpp`, `.S`, build files, tests, or docs.
+- **U-02** No local patch may be applied inside the submodule.
+- **U-03** If an experiment must change a primitive or ABI, create a separate project-owned experimental implementation outside the submodule and record its upstream provenance. Do not overwrite or patch the pristine reference tree.
+- **U-04** Verification must prove the upstream working tree is clean.
+
+This distinction is intentional: **selecting a smaller source closure** and **modifying the mechanism itself** are different experiments and must remain separately attributable.
 
 ## Minimal Boost dependency submodules
 
-The R0 (`boost::context::fiber`) path needs a small set of other Boost headers.
-They are fetched as pinned submodules rather than by vendoring the whole Boost
-tree. The audited closure is `config`, `assert`, `core`, `smart_ptr`
-(`boost/intrusive_ptr.hpp`) and `mp11`. `predef` and `pool` are not on the
-`fiber_fcontext` include path and are deliberately absent.
+The R0 (`boost::context::fiber`) reference path needs a small set of other Boost headers. They are fetched as pinned submodules rather than by vendoring the whole Boost tree. The audited P0 dependency closure is `config`, `assert`, `core`, `smart_ptr` (`boost/intrusive_ptr.hpp`) and `mp11`. `predef` and `pool` are not on the `fiber_fcontext` include path and are deliberately absent.
 
 | Path | Upstream | Pinned commit |
 | --- | --- | --- |
@@ -48,25 +37,29 @@ tree. The audited closure is `config`, `assert`, `core`, `smart_ptr`
 | `third_party/boost-smart_ptr` | boostorg/smart_ptr | `6e945160d788b8efdfc49ba4af1f8797cacd7c97` |
 | `third_party/boost-mp11` | boostorg/mp11 | `0daffd6401724ddf473fd39d28f68e138d9a1303` |
 
+These additional repositories are reference dependencies, not a claim that they are part of the eventual minimum runtime closure. Future experiments must distinguish reference-only dependencies from mechanisms actually required by the candidate runtime.
+
 ## Updating upstream
 
-Never track `develop` or any moving ref. An update is a reviewed commit:
+Never track `develop` or any moving ref. An upstream change is a reviewed experiment-input change:
 
-1. Propose a new commit SHA.
-2. Inspect the diff between the old and new SHA.
-3. `git -C third_party/boost-context checkout <new-sha>` and stage the gitlink.
-4. Update the pinned SHA here and in `xmake.lua`.
-5. Run P0 correctness: `xmake f -m debug && xmake && xmake run test_reference && xmake run test_raw_fcontext`.
-6. Run the benchmark: `xmake f -m release && xmake && xmake run bench_context_switch`.
-7. Review the symbol set: `tools/verify/symbols.sh release`.
-8. Commit the SHA change.
+1. Propose a new exact commit SHA.
+2. Inspect the diff between the old and new revision.
+3. Update the relevant submodule gitlink.
+4. Update every recorded identity that is intentionally duplicated for verification.
+5. Re-run the baseline regression suite.
+6. Re-run symbol/source inspection.
+7. Audit affected documentation and experiments for assumptions invalidated by the update.
+8. Commit the identity change with the resulting evidence.
 
-After an update, re-verify at minimum: the submodule is clean, P0 correctness
-passes for R0 and R1, the benchmark runs, and the compiled source set and symbol
-set in `docs/P0-BASELINE.md` still match reality.
+At minimum, the existing P0 regression remains a required guard while it exists:
+
+```sh
+./tools/verify/p0.sh
+```
+
+An upstream update must not silently change the source closure, ABI assumptions, symbol set, correctness behavior, or benchmark interpretation of an existing experiment. If it does, update or retire the affected experiment explicitly rather than rewriting history.
 
 ## Verification
 
-`tools/verify/p0.sh` asserts that the pinned SHA matches the gitlink recorded in
-the repository, the checked-out submodule commit, and the SHA recorded in this
-document and `xmake.lua`. Any drift fails the run.
+`tools/verify/p0.sh` currently checks the P0 pinned identities, submodule cleanliness, correctness baselines, benchmark smoke, and symbol expectations. Later phases may add additional verification, but must not weaken these existing reproducibility checks without an explicit reviewed reason.
