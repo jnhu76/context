@@ -73,44 +73,56 @@ Header dependencies come from the pinned Boost submodules listed in
 
 ## Actual symbols
 
-R1 `libraw_fcontext_reference.a` defines only:
+The closure below is machine-checked on the real archives by `tools/verify/symbols.sh`, in
+both build modes. The oracle is layered, and each layer is stated with the
+strength it actually has:
+
+1. **Complete inventory.** Every defined symbol of every archive (with its `nm`
+   class letter) and every undefined entry is printed, and the assertions below
+   run on that complete defined-symbol set.
+2. **Exact global closure.** Set equality against an explicit list, so a missing
+   symbol and an unexpected extra symbol both fail — and an extra symbol fails
+   in whatever class it appears (`W`, `D`, `B`, `R`, `t`, `u`, ...), not only in
+   `T`. A GNU unique symbol (`u`) counts as global here: `readelf` reports its binding
+   as `UNIQUE`, so bucketing it with the locals would let an extra globally bound
+   symbol pass as "compiler-generated".
+3. **Forbidden families across every class.** `ontop_fcontext` for R1 and
+   `continuation|fiber` for R0 are rejected over all defined symbols (mangled and
+   demangled names) and over undefined references.
+4. **Classified local symbols.** Every local (`STB_LOCAL`) defined symbol must be
+   either a label of a pinned upstream assembly source compiled into that target
+   (checked against the pinned `.S` file) or a compiler-generated
+   internal-linkage name (`_Z...`). Anything else fails; local symbols are never
+   wildcarded away.
+
+R1 `libraw_fcontext_reference.a` defines exactly, as global symbols:
 
 - `make_fcontext`
 - `jump_fcontext`
 
-No `ontop_fcontext`. `test_raw_fcontext` defines or references no Boost symbols.
+No `ontop_fcontext`, neither defined nor referenced. Its local symbols are `finish`
+and `trampoline`, the local labels of the pinned upstream
+`make_x86_64_sysv_elf_gas.S`.
 
-R0 `libboost_context_reference.a` defines:
+R0 `libboost_context_reference.a` defines exactly, as global symbols:
 
 - `make_fcontext`, `jump_fcontext`, `ontop_fcontext`
 - `boost::context::detail::{make,jump,ontop}_fcontext`
 - `boost::context::stack_traits::{default_size,is_unbounded,maximum_size,minimum_size,page_size}`
 
-No `continuation` or `fiber` implementation symbols.
+No `continuation` or `fiber` implementation symbols, in any symbol class.
 
-`tools/verify/symbols.sh` asserts less than the lists above, and its checks are
-narrower than they look. Its `defined_text()` helper runs `nm --defined-only`
-and keeps only entries whose type letter is `T` (defined global text symbols),
-deduplicated per archive; every archive check runs against that filtered set:
+`test_raw_fcontext`'s complete symbol table (defined and undefined, demangled)
+contains no `boost::` name, so R1 depends on no Boost symbol.
 
-- R1 defines `make_fcontext` and `jump_fcontext`, and does not define
-  `ontop_fcontext`.
-- R0 defines all three primitives, and defines at least one symbol whose name
-  contains `stack_traits`.
-- R0's `continuation`/`fiber` absence check runs against the same `T`-only set,
-  so it would not exclude such code appearing under another symbol class (`W`,
-  `t`, `D`, `B`, `R`, or an undefined entry). This is not a complete
-  symbol-closure oracle.
-- The one check that does cover the complete symbol table is the R1 binary:
-  `nm -C test_raw_fcontext` (defined and undefined, demangled) must contain no
-  `boost::` name.
-
-The `boost::context::detail::{make,jump,ontop}_fcontext` wrappers and the
-individual `stack_traits` members are stated from the pinned upstream sources
-and the build graph, and are not machine-checked at all. The
-`continuation`/`fiber` exclusion, the R1 "defines only" list and the R0 "defines"
-list above are checked only to the extent and within the `T`-only set described
-here; they are otherwise source-derived.
+Local symbols differ between the two modes, and that difference is reported
+rather than hidden: the debug archive has 12 unique local symbols (4 in `b`, 3 in
+`r`, 5 in `t`) and the release archive 6 (4 in `b`, 2 in `t`). `-O2` inlines or drops the
+internal-linkage helpers (`_ZN12_GLOBAL__N_1...`) and namespace-scope constants
+(`_ZL...`) that the debug archive still carries, leaving the function-local static
+guards and their storage. The **global** closure is identical in both modes;
+`tools/verify/p0.sh` proves that by comparing the closure files written for each
+mode instead of inferring one mode from the other.
 
 ## Correctness coverage
 
@@ -119,7 +131,7 @@ here; they are otherwise source-derived.
 | C-01 | basic deterministic transfer | yes | yes |
 | C-02 | ordinary local state preserved across suspend/resume | yes | yes |
 | C-03 | suspend from inside a real nested call; nested frame continues after resume | yes | yes |
-| C-04 | completion/lifetime boundary | fiber returns normally and becomes invalid | user body returns, terminal handoff occurs, raw context is never resumed, backing stack is then reclaimed |
+| C-04 | completion/lifetime boundary | fiber returns normally and becomes invalid | user body returns, the terminal handoff is observed on the resume loop and the flag is derived from that observation, raw context is never resumed, backing stack is then reclaimed |
 | C-05 | repeated deterministic switching (20,000 round-trips) | yes | yes |
 
 Not covered in P0: wake-before-park, external notification, multithread races,
@@ -164,6 +176,12 @@ kernel-scheduling numbers.
   scope rather than a pending P0 item.
 - R1's terminal handoff is a harness lifecycle convention; it is not a claim
   that raw `fcontext` provides a general termination/reclamation abstraction.
+  The C-04 flag is derived from the transfer the resume loop observed (null
+  sentinel plus a returned body), and `tests/raw_fcontext` drives a control
+  execution through the same loop that falsifies it, so the check is not a
+  tautology. "The dead context is never resumed" remains a convention the
+  harness upholds by not resuming it; the `std::abort()` after the handoff makes
+  a violation loud instead of silent.
 - `ontop_fcontext` is compiled into R0 only because upstream `fcontext.cpp`
   references it; it is not exercised by the harness.
 - Sanitizers are not enabled: custom stack switching produces misleading
