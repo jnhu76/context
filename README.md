@@ -4,13 +4,11 @@ An independent research repository for studying the **minimum sufficient executi
 
 This project is **not** a `boostorg/context` fork and is **not** a Boost.Context replacement. It consumes upstream Boost.Context as a pinned, immutable mechanism/reference source and selects only the source/capability closure required by each experiment.
 
-## Current state
+## Repository role
 
-**P0 — reproducible baseline** is established in this branch: public `boost::context::fiber` (R0), raw `make_fcontext`/`jump_fcontext` (R1), deterministic correctness tests, a context-switch benchmark, symbol inspection, and pinned upstream identities.
+The repository contains phase-specific evidence as well as long-lived research authority. A reproducible Boost.Context/raw-fcontext baseline is documented in `docs/P0-BASELINE.md`; later work may derive smaller user-space closures, add runtime semantics, profile the user/kernel boundary, and only then consider eBPF/sched_ext when evidence warrants it.
 
-P0 is a baseline, not the project scope. Subsequent work derives and tests smaller user-space source/function/state closures, then adds runtime semantics such as lifecycle, wait/wakeup, remote notification, and multi-worker execution. eBPF/sched_ext is considered only if profiling shows carrier scheduling or wakeup is an important bottleneck.
-
-See `AGENTS.md` for project-wide research discipline. Phase-specific facts remain in their corresponding documents.
+Do not infer the active phase from this README alone. Phase status must be supported by the repository/PR history and the corresponding phase evidence.
 
 ## Quick start
 
@@ -30,27 +28,24 @@ xmake
 xmake run bench_context_switch
 ```
 
-## Verify the P0 baseline
+## Verify the baseline
 
 ```sh
 ./tools/verify/p0.sh
 ```
 
-This regression check validates pinned upstream identities and cleanliness, debug/release builds, both correctness suites, benchmark smoke, and the compiled symbol set. It remains useful after P0 as a guard against baseline drift.
+This regression check validates pinned upstream identities and cleanliness, debug/release builds, both correctness suites, benchmark smoke, and the compiled symbol set. It is a baseline-drift guard, not a statement that later phases are complete.
 
 ## Documentation authority
 
-Read in this order:
+Read only the authorities relevant to the task, starting with:
 
-1. `AGENTS.md` — project-wide research/governance rules, including document-audit discipline.
-2. `docs/RESEARCH-FOUNDATION.md` — long-term research authority: questions, execution contract,
-   closure framework, phase model (P0–P5), evidence levels, and the proven/hypothesis ledger.
+1. `AGENTS.md` — project-wide governance and document-audit discipline.
+2. `docs/RESEARCH-FOUNDATION.md` — research questions, target contract, closure framework, phase model, measurement and stop conditions.
 3. `docs/UPSTREAM.md` — upstream identity, immutability, provenance, and update policy.
-4. `docs/P0-BASELINE.md` — P0 phase evidence (source/symbol set, tests, benchmark, limitations).
-5. Code and verification scripts (`xmake.lua`, `tools/verify/`, `tests/`, `bench/`).
+4. Phase/experiment evidence such as `docs/P0-BASELINE.md`.
+5. Code, build graph, tests, CI, benchmark implementation, and raw results.
 
-When documents disagree with code or experiments, the executable facts win and the documents are
-corrected — never the reverse.
+Conflicts are not resolved by a blanket “code wins” rule. Normative contract/project decisions and descriptive implementation/measurement claims have different authority; see `AGENTS.md` and `docs/RESEARCH-FOUNDATION.md`.
 
-Platform currently under study: Linux x86-64 SysV ABI. Next phase: **P1 — User-space Closure**
-(not started).
+Platform currently under study: Linux x86-64 SysV ABI.
