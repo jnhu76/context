@@ -1,89 +1,51 @@
 # AGENTS.md
 
-`jnhu76/context` is an **independent research repo**, not a fork of `boostorg/context`
-and not a Boost.Context replacement. It is a reproducible execution-mechanism research
-harness. The current phase is **P0 (reproducible baseline only)** — do not build P1+ yet.
+本仓库是独立的执行机制研究仓库，不是 `boostorg/context` 的 fork，也不修改上游。当前阶段仅做 **P0：可复现实验基线**。
 
-## Non-negotiable rules
+## 硬约束
 
-**Upstream is immutable.**
-- `third_party/boost-context` is a git submodule pinned to an exact commit SHA. Never
-  edit, patch, or copy-and-modify anything under it: sources (`.cpp` / `.hpp` / `.S`),
-  build files, tests, docs.
-- P0 must never require a modified upstream file. If a test needs one, stop and report
-  instead of patching.
-- Verify cleanliness before and after changes:
-  `git -C third_party/boost-context status --porcelain` must print nothing.
-- Never track `develop` or any moving ref. Updating upstream is a reviewed SHA change:
-  propose SHA → inspect diff → update submodule → run P0 correctness → run benchmark →
-  review symbol set → commit the SHA change.
+- `third_party/boost-context` 必须固定到明确 SHA；禁止修改、补丁化或复制后改写上游源码。
+- Xmake 是唯一实验构建入口；上游源文件必须按 target 显式列出，禁止 glob。
+- 仅支持 **Linux x86-64 SysV ABI**。
+- R0 与 R1 必须保持独立 target：
+  - **R0**：`boost::context::fiber`，作为公共 API / 行为参考。
+  - **R1**：原始 `make_fcontext` + `jump_fcontext`；除非正确性明确需要，否则不得引入 `ontop_fcontext`。
+- correctness 使用 debug；benchmark 使用 release；P0 禁止 LTO。
 
-**Xmake is the only build entry.**
-- Use `xmake f` / `xmake` / `xmake run`. Do not require Boost.Build, CMake, or Jam to
-  build the experiment; they are reference only.
-- Select upstream translation units explicitly per target. **Never** write
-  `add_files("third_party/boost-context/src/**")` or otherwise glob the upstream tree.
-- Keep R0 and R1 in separate targets — do not collapse the baseline into one big target.
-- `xmake f -m debug` for correctness, `xmake f -m release` for benchmark. Do not enable
-  LTO in P0 (it destroys P1 source/function attribution).
+## P0 要证明什么
 
-**Platform is Linux x86-64 SysV ABI only.** Do not add Windows / macOS / ARM / RISC-V /
-PPC / other backends or their upstream sources.
+测试应覆盖少量但强的事实：
 
-## P0 scope
+1. 基本 context transfer；
+2. suspend/resume 后局部状态保持；
+3. suspend 发生在真实的嵌套调用栈中；
+4. context 正常结束后不会再次 resume，且生命周期处理明确；
+5. 数千次以上确定性 ping-pong。
 
-Two clearly separated reference layers:
-- **R0** — `boost::context::fiber` public API, used as a behavior/reference oracle.
-  Simplest deterministic ping-pong; no scheduler.
-- **R1** — raw upstream `make_fcontext` + `jump_fcontext`. Add `ontop_fcontext` only if
-  correctness demonstrably requires it, and document why.
+Benchmark 只建立可复现基线：warm-up、固定迭代数、wall-clock、每次 transfer 平均成本。**不得据此声称最小语义或优于 Boost.Context。**
 
-For raw fcontext, compile only the translation units actually needed
-(e.g. `src/asm/make_x86_64_sysv_elf_gas.S` and `src/asm/jump_x86_64_sysv_elf_gas.S`).
-Any extra upstream TU must be justified: which symbol, and whether the dependency is
-correctness, link, or convenience.
+## P0 禁止扩展
 
-Correctness tests (few and strong) cover: basic transfer, local state preserved across
-suspend/resume, suspend inside a nested call, normal termination (never resume a finished
-context), and thousands+ of deterministic ping-pongs.
+不要实现 scheduler、ready queue、wait/wakeup、futex、multi-worker、work stealing、migration、自定义 context ABI、寄存器保存集修改、MXCSR/x87/CET/TLS 删除、eBPF、sched_ext 或任何内核调度策略。
 
-Benchmark: one release-mode ping-pong with warm-up, fixed iteration count, wall-clock,
-mean per-transfer cost, and the raw iteration count. It establishes a reproducible
-baseline; it does **not** prove optimization.
+## 验证
 
-**P0 must NOT implement:** scheduler, user-space thread runtime, ready queue, wait/wakeup,
-futex abstraction, multi-worker, work stealing, migration, `jump_fcontext`/register-save
-changes, removal of MXCSR/x87/CET/TLS handling, custom context ABI, eBPF, sched_ext, BPF
-loader, or kernel policy. Do not make minimality or "faster than Boost.Context" claims.
-Do not add wake-before-park, external notification, multithread races, remote wake, or
-shutdown protocols to the tests.
+统一入口：
 
-## Evidence and verification
+```sh
+./tools/verify/p0.sh
+```
 
-- One verification entrypoint (`./tools/verify/p0.sh`) checks: pinned SHA, submodule
-  clean, debug build, correctness tests, release build, benchmark runs, symbol
-  inspection. Fail loudly on missing tools — never silently skip.
-- Symbol inspection with `nm` / `readelf -Ws` / `objdump` must reveal which fcontext
-  primitives are in the artifact and whether `ontop_fcontext` or unrelated Boost.Context
-  code leaked in.
-- Record experiment identity: OS, kernel, arch, compiler + version, Xmake version, build
-  mode, upstream SHA, target ABI, optimization flags (and CPU model if cheap).
+必须验证：上游 SHA 与 submodule cleanliness、debug correctness、release benchmark smoke、实际链接到的 fcontext symbols。缺少工具或证据时应失败，不得静默跳过。
 
-## Docs to keep in sync
+## 文档职责
 
-- `docs/UPSTREAM.md` — upstream repo, pinned SHA, acquisition method, why no fork,
-  immutability policy, update procedure and what must be re-verified after an update.
-- `docs/P0-BASELINE.md` — scope, platform, R0/R1, actual compiled source set, actual
-  symbols, correctness coverage, benchmark, known limitations.
-- `README.md` — shortest path (`git clone --recurse-submodules`, `xmake f -m release`,
-  `xmake`, `xmake run ...`). State that no minimality/runtime/kernel claims are made.
+详细事实放在对应 authority 文档，不在本文件重复：
 
-## Stop and report (do not work around)
+- `docs/UPSTREAM.md`：上游来源、固定 SHA、更新规则；
+- `docs/P0-BASELINE.md`：P0 范围、实际 source/symbol、测试与 benchmark；
+- `README.md`：最短构建与运行路径。
 
-- Pinned SHA missing or unreachable.
-- Not Linux x86-64.
-- Xmake cannot build the upstream x86-64 fcontext assembly (investigate the root cause;
-  do not switch back to CMake/Jam and call it done).
-- Raw fcontext would need an upstream edit to pass.
-- R0 is blocked by missing Boost dependencies and cannot be satisfied within scope — do
-  not vendor the whole Boost tree.
+## 停止条件
+
+遇到以下情况不要绕过：上游 SHA 不可获取、平台不是 Linux x86-64、Xmake 无法构建目标汇编、R1 需要修改上游源码、或 R0 只能通过 vendoring 整个 Boost 才能继续。先报告根因，再决定是否调整 P0。
