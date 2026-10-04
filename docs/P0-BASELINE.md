@@ -105,10 +105,12 @@ deduplicated per archive; every archive check runs against that filtered set:
   `nm -C test_raw_fcontext` (defined and undefined, demangled) must contain no
   `boost::` name.
 
-The `boost::context::detail::{make,jump,ontop}_fcontext` wrappers, the
-individual `stack_traits` members, and the absence of any *other* symbol in
-either archive are stated from the pinned upstream sources and the build graph;
-they are not machine-checked.
+The `boost::context::detail::{make,jump,ontop}_fcontext` wrappers and the
+individual `stack_traits` members are stated from the pinned upstream sources
+and the build graph, and are not machine-checked at all. The
+`continuation`/`fiber` exclusion, the R1 "defines only" list and the R0 "defines"
+list above are checked only to the extent and within the `T`-only set described
+here; they are otherwise source-derived.
 
 ## Correctness coverage
 
