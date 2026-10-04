@@ -5,7 +5,7 @@
 - Upstream: <https://github.com/boostorg/context>
 - Local path: `third_party/boost-context`
 - Acquisition: `git submodule` (recorded in `.gitmodules`)
-- Pinned commit: `1b7bb3d6173032c592cbe82d43f4406e51c3653a`
+- Pinned commit: recorded in the dependency table below, and mirrored in `xmake.lua` and `tools/verify/p0.sh` so the pin can be cross-checked rather than trusted
 
 This repository is **not** a fork of `boostorg/context` and maintains no fork relationship. It consumes upstream as a pinned, immutable submodule and treats that tree as experimental input/reference material rather than project-owned implementation.
 
@@ -62,4 +62,4 @@ An upstream update must not silently change the source closure, ABI assumptions,
 
 ## Verification
 
-`tools/verify/p0.sh` currently checks the P0 pinned identities, submodule cleanliness, correctness baselines, benchmark smoke, and symbol expectations. Later phases may add additional verification, but must not weaken these existing reproducibility checks without an explicit reviewed reason.
+`tools/verify/p0.sh` currently cross-checks the Boost.Context pin against the gitlink, the submodule HEAD, this document and `xmake.lua`; requires every submodule to be initialized with a clean working tree; and checks the correctness baselines, a benchmark smoke run and the symbol expectations in both build modes. It does **not** verify the other reference-dependency pins at all: those submodules only have to be initialized with a clean working tree, and the script does not reject the `+` status that marks a submodule checked out at a commit other than its gitlink, so a wrong-but-clean checkout passes. For those five entries the table above is a record, not a re-verified assertion. Later phases may add additional verification, but must not weaken these existing reproducibility checks without an explicit reviewed reason.
