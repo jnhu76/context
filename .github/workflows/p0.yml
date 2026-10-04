@@ -1,5 +1,17 @@
 name: p0
 
+# CI is bootstrap only. It prepares a checkout, the submodules, Xmake and the
+# inspection tools, then runs the documented verification entry point.
+#
+# Every verification semantic lives in tools/verify/p0.sh: platform/tool
+# prerequisites, submodule identity (initialized, gitlink == HEAD, clean),
+# debug build + correctness tests, release build + benchmark smoke run, symbol
+# closure inspection in both modes, the cross-mode closure comparison, and the
+# negative controls for both oracles. There is exactly one definition of
+# "verified"; a build, test, cleanliness or symbol check added here would
+# recreate a second, weaker gate that can silently drift from the script
+# (see issue #3).
+
 on:
   push:
     branches: ["**"]
@@ -9,6 +21,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
+      # --- bootstrap / environment only -------------------------------------
       - name: Checkout (with submodules)
         uses: actions/checkout@v4
         with:
@@ -19,25 +32,9 @@ jobs:
         with:
           xmake-version: "2.9.7"
 
-      - name: Install inspection tools
+      - name: Install inspection tools (binutils provides nm, readelf, objdump, ar, c++filt)
         run: sudo apt-get update && sudo apt-get install -y binutils
 
-      - name: Debug build and correctness tests
-        run: |
-          xmake f -m debug
-          xmake
-          xmake run test_reference
-          xmake run test_raw_fcontext
-
-      - name: Release build and symbol verification
-        run: |
-          xmake f -m release
-          xmake
-          tools/verify/symbols.sh release
-
-      - name: Benchmark smoke run (no performance gate)
-        run: xmake run bench_context_switch 20000
-
-      - name: Submodule cleanliness
-        run: |
-          test -z "$(git -C third_party/boost-context status --porcelain)"
+      # --- single verification gate -----------------------------------------
+      - name: Verify (tools/verify/p0.sh)
+        run: ./tools/verify/p0.sh
