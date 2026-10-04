@@ -34,6 +34,13 @@ Uses upstream `make_fcontext` and `jump_fcontext` directly. `ontop_fcontext` is
 available upstream but is not required by this harness and is deliberately not
 compiled into R1.
 
+R1 distinguishes user-body completion from raw-context return. On the pinned
+x86-64 SysV backend, returning from the `make_fcontext` entry reaches upstream's
+`finish` path, which exits the process. Therefore the harness lets the user body
+return normally to its local trampoline, then performs an explicit terminal
+handoff to the resumer. After that handoff the raw context is dead by harness
+contract, is never resumed, and only then is its backing stack reclaimed.
+
 ## Actual source set
 
 Xmake compiles exactly the following upstream translation units. No
@@ -66,7 +73,7 @@ R1 `libraw_fcontext_reference.a` defines only:
 - `make_fcontext`
 - `jump_fcontext`
 
-No `ontop_fcontext`. `test_raw_fcontext` references no Boost symbols at all.
+No `ontop_fcontext`. `test_raw_fcontext` defines or references no Boost symbols.
 
 R0 `libboost_context_reference.a` defines:
 
@@ -79,13 +86,13 @@ asserts all of the above.
 
 ## Correctness coverage
 
-| ID | Property | Where |
-| --- | --- | --- |
-| C-01 | basic deterministic transfer | both suites |
-| C-02 | ordinary local state preserved across suspend/resume | both suites |
-| C-03 | suspend from inside a nested call | both suites |
-| C-04 | normal termination; a finished context is not resumed | both suites |
-| C-05 | repeated deterministic switching (20,000 round-trips) | both suites |
+| ID | Property | R0 | R1 |
+| --- | --- | --- | --- |
+| C-01 | basic deterministic transfer | yes | yes |
+| C-02 | ordinary local state preserved across suspend/resume | yes | yes |
+| C-03 | suspend from inside a real nested call; nested frame continues after resume | yes | yes |
+| C-04 | completion/lifetime boundary | fiber returns normally and becomes invalid | user body returns, terminal handoff occurs, raw context is never resumed, backing stack is then reclaimed |
+| C-05 | repeated deterministic switching (20,000 round-trips) | yes | yes |
 
 Not covered in P0: wake-before-park, external notification, multithread races,
 remote wake, shutdown protocol.
@@ -101,11 +108,13 @@ xmake
 xmake run bench_context_switch [rounds]   # default 200000
 ```
 
-It performs a warm-up, then a fixed iteration count, and reports elapsed
-wall-clock, mean cost per round-trip and per transfer, plus the raw iteration
-count. It also prints an environment manifest (OS, kernel, arch, CPU, compiler
-and version, Xmake version, build mode, upstream SHA, target ABI, optimization
-flags).
+It performs a warm-up, then constructs and primes the measured fiber before the
+timed interval. The timer covers exactly the requested steady-state ping-pong
+rounds (`2 * rounds` context transfers); final termination and destruction occur
+after the timer. It reports elapsed wall-clock, mean cost per round-trip and per
+transfer, plus the raw iteration/transfer counts. It also prints an environment
+manifest (OS, kernel, arch, CPU, compiler and version, Xmake version, build mode,
+upstream SHA, target ABI, optimization flags).
 
 It establishes a reproducible baseline. It does **not** prove optimization and
 deliberately reports no p99, throughput regime, million-fiber, multi-worker, or
@@ -118,6 +127,8 @@ kernel-scheduling numbers.
 - No kernel/eBPF/sched_ext work has been introduced.
 - No performance optimization has been attempted.
 - No theoretical lower bound has been established.
+- R1's terminal handoff is a harness lifecycle convention; it is not a claim
+  that raw `fcontext` provides a general termination/reclamation abstraction.
 - `ontop_fcontext` is compiled into R0 only because upstream `fcontext.cpp`
   references it; it is not exercised by the harness.
 - Sanitizers are not enabled: custom stack switching produces misleading
