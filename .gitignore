@@ -1,0 +1,9 @@
+# Build output
+build/
+.xmake/
+
+# Editor / tooling
+compile_commands.json
+*.o
+*.a
+*.so
