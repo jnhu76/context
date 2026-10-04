@@ -31,7 +31,9 @@ struct RawFcontextResult {
     long rounds;             // requested round-trips
     long child_runs;         // times the child body executed
     long final_local_state;  // child-local variable after the last resume
-    bool terminated;         // the child transferred back with the null sentinel
+    long nested_resumes;     // nested helper continued after each suspension
+    bool body_returned;      // user body returned normally to the trampoline
+    bool terminal_handoff;   // trampoline transferred away and was not resumed
 };
 
 namespace detail {
@@ -40,29 +42,53 @@ struct raw_state {
     long rounds;
     long child_runs;
     long final_local_state;
+    long nested_resumes;
+    bool body_returned;
 };
 
-// C-03: suspend from inside a nested call. Its frame must survive the switch.
-inline raw_transfer_t raw_suspend(raw_transfer_t t, raw_state* state) {
-    return jump_fcontext(t.fctx, state);
+#if defined(__GNUC__) || defined(__clang__)
+#  define P0_NOINLINE __attribute__((noinline))
+#else
+#  define P0_NOINLINE
+#endif
+
+// C-03 needs a real call frame, not merely source-level nesting. noinline keeps
+// this helper distinct, and the observable increment after resume prevents the
+// call from being reduced to a tail jump.
+P0_NOINLINE inline raw_transfer_t raw_suspend(raw_transfer_t t, raw_state* state) {
+    raw_transfer_t resumed = jump_fcontext(t.fctx, state);
+    ++state->nested_resumes;
+    return resumed;
 }
 
-inline void raw_child_entry(raw_transfer_t t) {
-    raw_state* state = static_cast<raw_state*>(t.data);
-
-    // C-02: an ordinary local variable that must survive suspend/resume.
+// Keep the user body distinct from the raw fcontext trampoline. The body may
+// return normally; the trampoline itself must not return because upstream
+// make_fcontext's x86-64 SysV return path exits the process.
+P0_NOINLINE inline raw_transfer_t raw_child_body(raw_transfer_t t, raw_state* state) {
     long local_state = 0;
     for (long i = 0; i < state->rounds; ++i) {
         ++local_state;
         ++state->child_runs;
-        // Yield back to the resumer through a nested call.
         t = raw_suspend(t, state);
     }
     state->final_local_state = local_state;
+    return t;
+}
 
-    // A raw fcontext entry function must not return: transfer back with a null
-    // sentinel so the resumer can observe normal termination (C-04).
+#undef P0_NOINLINE
+
+inline void raw_child_entry(raw_transfer_t t) {
+    raw_state* state = static_cast<raw_state*>(t.data);
+
+    t = raw_child_body(t, state);
+    state->body_returned = true;
+
+    // Raw fcontext entry functions must not return. Completion is therefore an
+    // explicit terminal handoff: transfer to the resumer with a null sentinel.
+    // If this dead context is ever resumed, abort instead of continuing on a
+    // backing stack whose owner is allowed to reclaim it after the handoff.
     jump_fcontext(t.fctx, nullptr);
+    std::abort();
 }
 
 } // namespace detail
@@ -73,21 +99,33 @@ inline RawFcontextResult run_raw_fcontext_pingpong(long rounds) {
     // make_fcontext aligns the stack pointer itself; malloc gives a suitably
     // aligned base and the top of the stack is base + size.
     void* stack = std::malloc(kStackSize);
+    if (stack == nullptr) {
+        std::abort();
+    }
+
     raw_fcontext_t child =
         make_fcontext(static_cast<char*>(stack) + kStackSize, kStackSize,
                       detail::raw_child_entry);
 
-    detail::raw_state state{rounds, 0, -1};
+    detail::raw_state state{rounds, 0, -1, 0, false};
 
     raw_transfer_t t = jump_fcontext(child, &state); // enter the child
     while (t.data != nullptr) {
-        // Resume until the child terminates (null sentinel).
         t = jump_fcontext(t.fctx, &state);
     }
 
+    // The null sentinel is the terminal handoff. The child is now dead by
+    // contract and is never resumed; only after observing that handoff do we
+    // reclaim its backing stack.
+    const bool terminal_handoff = true;
     std::free(stack);
 
-    return RawFcontextResult{rounds, state.child_runs, state.final_local_state, true};
+    return RawFcontextResult{rounds,
+                             state.child_runs,
+                             state.final_local_state,
+                             state.nested_resumes,
+                             state.body_returned,
+                             terminal_handoff};
 }
 
 } // namespace p0
