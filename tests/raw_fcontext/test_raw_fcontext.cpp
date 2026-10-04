@@ -1,8 +1,9 @@
 // P0 R1 correctness: raw fcontext baseline (make_fcontext + jump_fcontext).
 //
-// Coverage: C-01 basic transfer, C-02 local state preservation, C-04 normal
-// termination, C-05 repeated deterministic switching. No scheduler, no external
-// notification, no multithreading.
+// Coverage: C-01 basic transfer, C-02 local state preservation, C-03 suspend
+// from inside a nested call, C-04 normal termination, C-05 repeated
+// deterministic switching. No scheduler, no external notification, no
+// multithreading.
 
 #include "p0_check.hpp"
 

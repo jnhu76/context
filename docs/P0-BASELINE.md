@@ -83,7 +83,7 @@ asserts all of the above.
 | --- | --- | --- |
 | C-01 | basic deterministic transfer | both suites |
 | C-02 | ordinary local state preserved across suspend/resume | both suites |
-| C-03 | suspend from inside a nested call | R0 suite |
+| C-03 | suspend from inside a nested call | both suites |
 | C-04 | normal termination; a finished context is not resumed | both suites |
 | C-05 | repeated deterministic switching (20,000 round-trips) | both suites |
 

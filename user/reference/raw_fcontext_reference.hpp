@@ -42,6 +42,11 @@ struct raw_state {
     long final_local_state;
 };
 
+// C-03: suspend from inside a nested call. Its frame must survive the switch.
+inline raw_transfer_t raw_suspend(raw_transfer_t t, raw_state* state) {
+    return jump_fcontext(t.fctx, state);
+}
+
 inline void raw_child_entry(raw_transfer_t t) {
     raw_state* state = static_cast<raw_state*>(t.data);
 
@@ -50,8 +55,8 @@ inline void raw_child_entry(raw_transfer_t t) {
     for (long i = 0; i < state->rounds; ++i) {
         ++local_state;
         ++state->child_runs;
-        // Yield back to the resumer. t.fctx is the context that resumed us.
-        t = jump_fcontext(t.fctx, state);
+        // Yield back to the resumer through a nested call.
+        t = raw_suspend(t, state);
     }
     state->final_local_state = local_state;
 
