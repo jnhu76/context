@@ -77,28 +77,37 @@ The closure below is machine-checked on the real archives by `tools/verify/symbo
 both build modes. The oracle is layered, and each layer is stated with the
 strength it actually has:
 
-1. **Complete inventory.** Every defined symbol of every archive (with its `nm`
-   class letter) and every undefined entry is printed, and the assertions below
-   run on that complete defined-symbol set.
-2. **Exact global closure.** Set equality against an explicit list, so a missing
-   symbol and an unexpected extra symbol both fail — and an extra symbol fails
-   in whatever class it appears (`W`, `D`, `B`, `R`, `t`, `u`, ...), not only in
-   `T`. A GNU unique symbol (`u`) counts as global here: `readelf` reports its binding
-   as `UNIQUE`, so bucketing it with the locals would let an extra globally bound
-   symbol pass as "compiler-generated".
+1. **Complete inventory.** Every defined symbol of every archive is printed as an
+   (archive member, symbol, `nm` class) entry with its multiplicity preserved,
+   together with every undefined entry and its class (an undefined reference can
+   be weak, `w`/`v`, as well as `U`); the assertions below run on that complete
+   defined-symbol set.
+2. **Exact global closure.** Multiset equality against an explicit list of
+   (archive member, symbol, `nm` class) entries, so a missing symbol, an extra
+   symbol in whatever class it appears (`W`, `D`, `B`, `R`, `t`, `u`, ...), a
+   duplicated definition, and a required definition replaced by a same-name
+   definition of another class all fail. The defining archive member is part of the
+   entry: for a static archive, which member provides a definition is a property of
+   the artifact. Comparing the *set of names* instead — as an earlier revision of
+   this oracle did — cannot see the last three, because they leave the name set
+   unchanged while the artifact changed. A GNU unique symbol (`u`) counts as global
+   here: `readelf` reports its binding as `UNIQUE`, so bucketing it with the locals
+   would let an extra globally bound symbol pass as "compiler-generated".
 3. **Forbidden families across every class.** `ontop_fcontext` for R1 and
    `continuation|fiber` for R0 are rejected over all defined symbols (mangled and
    demangled names) and over undefined references.
 4. **Classified local symbols.** Every local (`STB_LOCAL`) defined symbol must be
    either a label of a pinned upstream assembly source compiled into that target
    (checked against the pinned `.S` file) or a compiler-generated
-   internal-linkage name (`_Z...`). Anything else fails; local symbols are never
-   wildcarded away.
+   internal-linkage name (`_Z...`). Anything else fails, and the complete local set
+   is observed rather than sampled. This is a classification, not an allowlist: a
+   local symbol whose name already has that shape is accepted without being
+   enumerated, so it bounds the *shape* of the local set, not its exact membership.
 
 R1 `libraw_fcontext_reference.a` defines exactly, as global symbols:
 
-- `make_fcontext`
-- `jump_fcontext`
+- `make_x86_64_sysv_elf_gas.S.o`: `make_fcontext`
+- `jump_x86_64_sysv_elf_gas.S.o`: `jump_fcontext`
 
 No `ontop_fcontext`, neither defined nor referenced. Its local symbols are `finish`
 and `trampoline`, the local labels of the pinned upstream
@@ -106,9 +115,12 @@ and `trampoline`, the local labels of the pinned upstream
 
 R0 `libboost_context_reference.a` defines exactly, as global symbols:
 
-- `make_fcontext`, `jump_fcontext`, `ontop_fcontext`
-- `boost::context::detail::{make,jump,ontop}_fcontext`
-- `boost::context::stack_traits::{default_size,is_unbounded,maximum_size,minimum_size,page_size}`
+- `make_x86_64_sysv_elf_gas.S.o`, `jump_x86_64_sysv_elf_gas.S.o` and
+  `ontop_x86_64_sysv_elf_gas.S.o`: `make_fcontext`, `jump_fcontext`,
+  `ontop_fcontext`
+- `fcontext.cpp.o`: `boost::context::detail::{make,jump,ontop}_fcontext`
+- `stack_traits.cpp.o`:
+  `boost::context::stack_traits::{default_size,is_unbounded,maximum_size,minimum_size,page_size}`
 
 No `continuation` or `fiber` implementation symbols, in any symbol class.
 
@@ -116,13 +128,14 @@ No `continuation` or `fiber` implementation symbols, in any symbol class.
 contains no `boost::` name, so R1 depends on no Boost symbol.
 
 Local symbols differ between the two modes, and that difference is reported
-rather than hidden: the debug archive has 12 unique local symbols (4 in `b`, 3 in
-`r`, 5 in `t`) and the release archive 6 (4 in `b`, 2 in `t`). `-O2` inlines or drops the
-internal-linkage helpers (`_ZN12_GLOBAL__N_1...`) and namespace-scope constants
-(`_ZL...`) that the debug archive still carries, leaving the function-local static
-guards and their storage. The **global** closure is identical in both modes;
-`tools/verify/p0.sh` proves that by comparing the closure files written for each
-mode instead of inferring one mode from the other.
+rather than hidden: the debug archive has 15 local defined entries over 12 unique
+names (4 in `b`, 3 in `r`, 5 in `t`), and the release archive 6 entries over 6
+unique names (4 in `b`, 2 in `t`). `-O2` inlines or drops the internal-linkage
+helpers (`_ZN12_GLOBAL__N_1...`) and namespace-scope constants (`_ZL...`) that the
+debug archive still carries, leaving the function-local static guards and their
+storage. The **global** closure is identical in both modes; `tools/verify/p0.sh`
+proves that by comparing the closure files written for each mode instead of
+inferring one mode from the other.
 
 ## Correctness coverage
 
