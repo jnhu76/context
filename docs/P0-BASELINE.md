@@ -78,10 +78,13 @@ both build modes. The oracle is layered, and each layer is stated with the
 strength it actually has:
 
 1. **Complete inventory.** Every defined symbol of every archive is printed as an
-   (archive member, symbol, `nm` class) entry with its multiplicity preserved,
-   together with every undefined entry and its class (an undefined reference can
-   be weak, `w`/`v`, as well as `U`); the assertions below run on that complete
-   defined-symbol set.
+   (archive member, symbol, `nm` class, ELF binding) entry with its multiplicity
+   preserved, together with every undefined entry and its class (an undefined
+   reference can be weak, `w`/`v`, as well as `U`); the assertions below run on
+   that complete defined-symbol set. Every entry is joined to its ELF
+   symbol-table row on (archive member, name, value), and the join itself is
+   checked: an entry appearing on only one side, a multiplicity mismatch, or one
+   position reporting two bindings or two `nm` classes fails.
 2. **Exact global closure.** Multiset equality against an explicit list of
    (archive member, symbol, `nm` class) entries, so a missing symbol, an extra
    symbol in whatever class it appears (`W`, `D`, `B`, `R`, `t`, `u`, ...), a
@@ -90,9 +93,13 @@ strength it actually has:
    entry: for a static archive, which member provides a definition is a property of
    the artifact. Comparing the *set of names* instead — as an earlier revision of
    this oracle did — cannot see the last three, because they leave the name set
-   unchanged while the artifact changed. A GNU unique symbol (`u`) counts as global
-   here: `readelf` reports its binding as `UNIQUE`, so bucketing it with the locals
-   would let an extra globally bound symbol pass as "compiler-generated".
+   unchanged while the artifact changed. Which side of the global/local bucket an
+   entry belongs to is decided by the ELF binding `readelf -Ws` reports
+   (`GLOBAL`/`WEAK`/`UNIQUE` vs `LOCAL`), not by the case of the `nm` letter: the
+   letter is a display rendering — GNU unique objects print as lowercase `u`, and
+   GNU indirect functions print as lowercase `i` whatever their binding is — so
+   bucketing by letter case would let a globally bound definition with a
+   compiler-generated name pass as a local.
 3. **Forbidden families across every class.** `ontop_fcontext` for R1 and
    `continuation|fiber` for R0 are rejected over all defined symbols (mangled and
    demangled names) and over undefined references.
