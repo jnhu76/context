@@ -4,7 +4,8 @@
 # Each control mutates a copy of a real release artifact and asserts that the
 # oracle fails *for the expected reason*.
 #
-# Two removed blind spots are demonstrated mechanically here rather than asserted:
+# Three removed blind spots are demonstrated mechanically here rather than
+# asserted:
 #
 #   * controls 1-3 inject a defined symbol whose nm class is not T -- exactly what
 #     the first oracle (nm --defined-only | awk '$2 == "T"') could not see -- and
@@ -17,6 +18,13 @@
 #     definition of an allowed name, an extra strong definition of an allowed name
 #     in a second archive member, a duplicate definition under the same member
 #     name, and a required strong definition replaced by a same-name weak one.
+#   * controls 11-12 compile two GNU indirect functions with the same nm class
+#     letter but opposite ELF bindings -- exactly what the third oracle (global =
+#     'u' or uppercase class) could not distinguish. The GLOBAL one has a
+#     compiler-generated '_Z' name and leaves the letter-case projection
+#     byte-identical to the real archive, so it had to pass as
+#     "compiler-generated"; the LOCAL one must be classified like any other
+#     local. The ELF binding is what tells them apart.
 
 set -euo pipefail
 
@@ -136,6 +144,71 @@ control_setup_name_invariant() {
     exit 1
   fi
   echo "   (control setup: global name-set projection byte-identical to the real archive; only class/member/multiplicity changed)"
+}
+
+# The projection the third oracle bucketed on: global defined names by nm letter
+# case ('u' or uppercase). Reimplemented here only so the controls can show that
+# the GLOBAL IFUNC leaves it byte-identical -- the blind spot the binding join
+# removes.
+old_case_global_names() {
+  nm --format=posix --defined-only "$1" 2>/dev/null \
+    | awk 'NF >= 3 && $2 ~ /^[A-Za-z]$/ { print $2 "\t" $1 }' | sort -u \
+    | awk -F'\t' '$1 == "u" || ($1 ~ /^[A-Z]$/ && $1 != "U") { print $2 }' | sort -u
+}
+
+# Fails the harness unless the mutated archive has exactly the same letter-case
+# global defined-name projection as the real archive -- what the case-based
+# oracle compared, so this is the mechanical proof that it could not distinguish
+# the artifact from the real one.
+control_setup_case_invariant() {
+  local real="$1" art="$2"
+  if ! diff <(old_case_global_names "$real") <(old_case_global_names "$art") >/dev/null; then
+    echo "control setup error: the letter-case global-name projection of $art differs from the real archive, so this control does not exercise the letter-case blind spot" >&2
+    diff <(old_case_global_names "$real") <(old_case_global_names "$art") >&2
+    exit 1
+  fi
+  echo "   (control setup: letter-case global-name projection byte-identical to the real archive)"
+}
+
+# Fails the harness unless the archive defines `name` with nm class `cls` and
+# readelf reports it as IFUNC with binding `bind` -- the exact (class, binding)
+# pair the control is about.
+control_setup_ifunc_binding() {
+  local art="$1" name="$2" cls="$3" bind="$4"
+  if ! nm --format=posix --defined-only "$art" 2>/dev/null | awk -v n="$name" -v c="$cls" '$1 == n && $2 == c { found = 1 } END { exit !found }'; then
+    echo "control setup error: $name is not defined with nm class $cls in $art" >&2
+    exit 1
+  fi
+  if ! readelf -Ws "$art" 2>/dev/null | awk -v n="$name" -v b="$bind" '$4 == "IFUNC" && $5 == b && $8 == n { found = 1 } END { exit !found }'; then
+    echo "control setup error: readelf does not report IFUNC $bind for $name in $art" >&2
+    exit 1
+  fi
+  echo "   (control setup: $name is nm class $cls, readelf IFUNC $bind)"
+}
+
+# The mirror image of expect_fail: a control artifact the oracle must ACCEPT, and
+# the classification line that proves the injected symbol went down the expected
+# path -- not silently.
+expect_pass() {
+  local desc="$1" pattern="$2"
+  shift 2
+  local out status
+  set +e
+  out="$(env P0_SYMBOLS_ALLOW_OVERRIDE=1 "$@" bash "$ORACLE" "$MODE" 2>&1)"
+  status=$?
+  set -e
+  if [ "$status" -ne 0 ]; then
+    echo "NEGATIVE CONTROL FAILED (oracle rejected a good artifact): $desc" >&2
+    echo "$out" >&2
+    exit 1
+  fi
+  if ! grep -Eq "$pattern" <<<"$out"; then
+    echo "NEGATIVE CONTROL FAILED (expected classification line missing): $desc" >&2
+    echo "   expected to match: $pattern" >&2
+    echo "$out" >&2
+    exit 1
+  fi
+  echo "   ok (oracle passes): $desc"
 }
 
 control_expect_count() {
@@ -291,5 +364,43 @@ control_expect_count "$tmp/r1_weak_replace.a" "$r1_make_member" make_fcontext T 
 control_expect_count "$tmp/r1_weak_replace.a" "$r1_make_member" make_fcontext W 1
 expect_fail "R1 archive + required T make_fcontext replaced by a same-name weak definition" \
   'required global definition missing' P0_SYMBOLS_R1_LIB="$tmp/r1_weak_replace.a"
+
+# 11. A GLOBAL GNU indirect function whose name has the compiler-generated '_Z'
+#     shape: nm renders it lowercase 'i', so bucketing by letter case passes it
+#     as a compiler-generated local and the extra global definition stays
+#     invisible to the closure. readelf reports it as IFUNC GLOBAL.
+cat > "$tmp/inject_ifunc_global.c" <<'CEOF'
+/* GLOBAL GNU indirect function: nm class 'i' (lowercase), readelf binding
+   GLOBAL. Every name in this object has the compiler-generated '_Z' shape that
+   letter-case bucketing accepts as a local. */
+static void _Zp0_ifunc_impl(void) {}
+static void *_Zp0_ifunc_resolve(void) { return (void *)_Zp0_ifunc_impl; }
+void _Zp0_global_ifunc(void) __attribute__((ifunc("_Zp0_ifunc_resolve")));
+CEOF
+cc -c -O0 -o "$tmp/inject_ifunc_global.o" "$tmp/inject_ifunc_global.c"
+cp "$r1_real" "$tmp/r1_ifunc_global.a"
+ar r "$tmp/r1_ifunc_global.a" "$tmp/inject_ifunc_global.o" 2>/dev/null
+control_setup_case_invariant "$r1_real" "$tmp/r1_ifunc_global.a"
+control_setup_ifunc_binding "$tmp/r1_ifunc_global.a" _Zp0_global_ifunc i GLOBAL
+expect_fail "R1 archive + GLOBAL IFUNC with a compiler-generated (_Z) name outside the closure" \
+  'unexpected extra global definition' P0_SYMBOLS_R1_LIB="$tmp/r1_ifunc_global.a"
+
+# 12. A LOCAL GNU indirect function: the same nm class letter as control 11 with
+#     the opposite ELF binding. A discriminator that only read "class i means
+#     global" would reject this artifact; the binding join classifies it like any
+#     other compiler-generated local and the whole oracle must still pass.
+cat > "$tmp/inject_ifunc_local.c" <<'CEOF'
+/* LOCAL GNU indirect function: nm class 'i' (the same letter as the GLOBAL one
+   in control 11), readelf binding LOCAL. */
+static void _Zp0_ifunc_limpl(void) {}
+static void *_Zp0_ifunc_lresolve(void) { return (void *)_Zp0_ifunc_limpl; }
+__attribute__((ifunc("_Zp0_ifunc_lresolve"), used)) static void _Zp0_local_ifunc(void);
+CEOF
+cc -c -O0 -o "$tmp/inject_ifunc_local.o" "$tmp/inject_ifunc_local.c"
+cp "$r1_real" "$tmp/r1_ifunc_local.a"
+ar r "$tmp/r1_ifunc_local.a" "$tmp/inject_ifunc_local.o" 2>/dev/null
+control_setup_ifunc_binding "$tmp/r1_ifunc_local.a" _Zp0_local_ifunc i LOCAL
+expect_pass "R1 archive + LOCAL IFUNC classified as a compiler-generated local" \
+  '_Zp0_local_ifunc -- compiler-generated' P0_SYMBOLS_R1_LIB="$tmp/r1_ifunc_local.a"
 
 echo "P0 SYMBOL ORACLE CONTROLS: PASS"
