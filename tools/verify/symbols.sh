@@ -3,7 +3,7 @@
 #
 # Answers, from the real artifacts, what each reference layer actually contains:
 #
-#   1. the complete defined-symbol inventory of every artifact, as
+#   1. the complete defined-symbol inventory of every archive, as
 #      (archive member, symbol, nm class) entries with multiplicity preserved;
 #   2. an exact global defined-symbol closure per archive: multiset equality over
 #      those entries, so a missing symbol, an extra symbol in any nm class, a
@@ -17,6 +17,10 @@
 #      classification of the complete observed local set, not an allowlist of
 #      local names -- a local symbol whose name already has that shape is accepted
 #      without being enumerated. Unclassified local symbols fail.
+#
+#   5. the R1 test binary: its complete symbol table (defined and undefined,
+#      demangled) must be free of Boost symbols, and every nm entry in it must
+#      be classifiable.
 #
 # The complete defined-symbol set (all classes) is what the assertions run on.
 # Two earlier revisions were weaker, and both are why this file looks the way it
@@ -86,7 +90,8 @@ asm_ontop="$asm_dir/ontop_x86_64_sysv_elf_gas.S"
 # "archive[member.o]:" lines. The type letter case is the binding: uppercase is
 # global, lowercase is local, U is undefined.
 #
-# closure_entries is the single extraction every assertion below runs on. It
+# closure_entries is the single extraction every defined-symbol assertion below
+# runs on. It
 # keeps the archive member, the nm class and the multiplicity, and it fails
 # instead of dropping anything it cannot parse: a dropped entry would silently
 # shrink the closure that the assertions then compare against.
