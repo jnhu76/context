@@ -90,7 +90,7 @@ step "cross-mode global symbol closure comparison"
 if ! diff -u "$workdir/closure.release" "$workdir/closure.debug"; then
   fail "the global defined-symbol closure differs between debug and release (diff above); that is a source-closure change, not a local-symbol artifact"
 fi
-echo "   global defined-symbol closure identical in debug and release: $(awk '!/^#/ { n++ } END { print n + 0 }' "$workdir/closure.release") entries of (archive member, symbol, nm class)"
+echo "   global defined-symbol closure identical in debug and release: $(awk '!/^#/ { n++ } END { print n + 0 }' "$workdir/closure.release") entries of (archive member, symbol, nm class, ELF binding)"
 
 step "negative controls: symbol closure oracle"
 bash tools/verify/tests/symbol_oracle_negative.sh
